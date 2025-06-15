@@ -35,9 +35,13 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Check if we're in the right directory
+# Check if we're in the right directory and navigate to project root
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+PROJECT_ROOT="$SCRIPT_DIR/../.."
+cd "$PROJECT_ROOT"
+
 if [[ ! -f "config/model_config_qwen.py" ]]; then
-    log_error "Please run this script from the MAPoRL project root directory"
+    log_error "Could not find project root directory with config/model_config_qwen.py"
     exit 1
 fi
 
@@ -164,7 +168,7 @@ if [ "$SKIP_DOWNLOAD" = false ] && [ "$TEST_ONLY" = false ]; then
     mkdir -p "$DATA_DIR"
     
     # Download data
-    if python3 download_medxpert_data.py; then
+    if python3 scripts/data/download_medxpert_data.py; then
         log_success "Data download completed"
         
         # Verify data files
@@ -196,7 +200,7 @@ if [ "$SKIP_TRAINING" = false ] && [ "$TEST_ONLY" = false ]; then
     # Check if training data exists
     if [[ ! -f "$DATA_DIR/medxpert_train.jsonl" ]]; then
         log_error "Training data not found at $DATA_DIR/medxpert_train.jsonl"
-        log_info "Run: python3 download_medxpert_data.py"
+        log_info "Run: python3 scripts/data/download_medxpert_data.py"
         exit 1
     fi
     
@@ -217,7 +221,7 @@ if [ "$SKIP_TRAINING" = false ] && [ "$TEST_ONLY" = false ]; then
     MONITOR_PID=$!
     
     # Run training
-    if python3 local_train_medxpert.py --data-dir "$DATA_DIR" --output-dir "$OUTPUT_DIR"; then
+    if python3 scripts/training/local_train_medxpert.py --data-dir "$DATA_DIR" --output-dir "$OUTPUT_DIR"; then
         kill $MONITOR_PID 2>/dev/null || true
         log_success "Training completed successfully"
         
@@ -246,7 +250,7 @@ fi
 # Step 5: Testing
 log_info "Testing trained agents..."
 
-if python3 local_train_medxpert.py --test-only --data-dir "$DATA_DIR" --output-dir "$OUTPUT_DIR"; then
+if python3 scripts/training/local_train_medxpert.py --test-only --data-dir "$DATA_DIR" --output-dir "$OUTPUT_DIR"; then
     log_success "Testing completed"
     
     # Show test results summary
@@ -278,7 +282,7 @@ echo "  📈 Logs: $OUTPUT_DIR/logs/"
 echo ""
 log_info "Next steps:"
 echo "  1. Review results: cat $OUTPUT_DIR/training_results.json"
-echo "  2. Test custom questions: python3 local_train_medxpert.py --test-only"
+echo "  2. Test custom questions: python3 scripts/training/local_train_medxpert.py --test-only"
 echo "  3. Deploy for inference: Create API endpoints"
 echo "  4. Fine-tune further: Add more medical data"
 

@@ -40,7 +40,7 @@ def create_sagemaker_training_job():
     estimator = PyTorch(
         # Entry point
         entry_point='sagemaker_entry.py',
-        source_dir='.',  # Current directory with all code
+        source_dir='..',  # Parent directory (project root) with all code
         
         # Model and environment
         framework_version='2.1.0',
@@ -79,7 +79,7 @@ def create_sagemaker_training_job():
         code_location=f's3://{sagemaker_session.default_bucket()}/maporl-medxpert-code',
         
         # Dependencies
-        requirements_file='requirements_sagemaker.txt',
+        requirements_file='sagemaker/requirements_sagemaker.txt',
         
         # Debugging and monitoring
         enable_sagemaker_metrics=True,
@@ -159,11 +159,11 @@ echo "📊 Train data: s3://$BUCKET_NAME/$PREFIX/train/medxpert_train.jsonl"
 echo "📊 Eval data: s3://$BUCKET_NAME/$PREFIX/eval/medxpert_eval.jsonl"
     '''
     
-    with open('scripts/upload_medxpert_data.sh', 'w') as f:
+    with open('../scripts/utilities/upload_medxpert_data.sh', 'w') as f:
         f.write(upload_script)
     
-    os.chmod('scripts/upload_medxpert_data.sh', 0o755)
-    print("✅ Created data upload script: scripts/upload_medxpert_data.sh")
+    os.chmod('../scripts/utilities/upload_medxpert_data.sh', 0o755)
+    print("✅ Created data upload script: scripts/utilities/upload_medxpert_data.sh")
 
 def monitor_training_job(job_name: str):
     """Monitor the training job and display logs."""

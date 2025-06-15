@@ -10,8 +10,8 @@ import json
 import wandb
 from typing import Dict, Any
 
-# Add src to path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+# Add src to path (now we're in scripts/training, so go up two levels to root)
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from src.training.maporl_trainer import create_trainer, load_medical_dataset, MAPoRLConfig
 from src.config.model_config import MULTI_AGENT_CONFIG

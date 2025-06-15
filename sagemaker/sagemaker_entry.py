@@ -12,8 +12,8 @@ import argparse
 from pathlib import Path
 from typing import Dict, Any
 
-# Add project root to path
-sys.path.append(str(Path(__file__).parent))
+# Add project root to path (we're in sagemaker/, so go up one level to root)
+sys.path.append(str(Path(__file__).parent.parent))
 
 # Configure logging
 logging.basicConfig(

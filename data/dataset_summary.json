@@ -1,23 +1,37 @@
 {
-  "total_samples": 10,
-  "training_samples": 8,
-  "validation_samples": 2,
-  "categories": [
-    "endocrinology",
-    "psychiatry",
-    "neurology",
-    "hematology",
-    "gastroenterology",
-    "obstetrics",
-    "infectious_disease",
-    "pulmonology",
-    "cardiology"
-  ],
-  "sources": [
-    "synthetic"
-  ],
-  "difficulty_levels": [
-    "medium",
-    "high"
-  ]
+  "total_samples": 2455,
+  "categories": {
+    "general_medicine": 2455
+  },
+  "sources": {
+    "MedXpertQA_real": 2455
+  },
+  "difficulty_levels": {
+    "medium": 2455
+  },
+  "medical_tasks": {
+    "Diagnosis": 1053,
+    "Basic Science": 654,
+    "Treatment": 748
+  },
+  "body_systems": {
+    "Digestive": 274,
+    "Nervous": 387,
+    "Cardiovascular": 306,
+    "Muscular": 177,
+    "Reproductive": 201,
+    "Skeletal": 357,
+    "Respiratory": 193,
+    "Endocrine": 176,
+    "Lymphatic": 85,
+    "Other / NA": 127,
+    "Urinary": 124,
+    "Integumentary": 48
+  },
+  "question_types": {
+    "Reasoning": 1865,
+    "Understanding": 590
+  },
+  "training_samples": 1964,
+  "validation_samples": 491
 }

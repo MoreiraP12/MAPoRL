@@ -149,17 +149,20 @@ def create_wandb_config_template():
 
 def check_project_structure():
     """Check if the project structure is set up correctly for W&B integration."""
+    # Change to project root directory
+    os.chdir(os.path.join(os.path.dirname(__file__), '..', '..'))
+    
     required_files = [
-        "train.py",
-        "local_train_medxpert.py",
+        "scripts/training/train.py",
+        "scripts/training/local_train_medxpert.py",
         "requirements.txt",
         "src/training/mapoRRL_trainer.py"
     ]
     
     optional_files = [
-        "sagemaker_entry.py",
-        "WANDB_INTEGRATION_GUIDE.md",
-        "example_wandb_training.py"
+        "sagemaker/sagemaker_entry.py",
+        "docs/WANDB_INTEGRATION_GUIDE.md",
+        "examples/example_wandb_training.py"
     ]
     
     print("\n📁 Checking project structure...")
@@ -236,14 +239,14 @@ def run_integration_check():
     if all(checks):
         print("\n🎉 All checks passed! Your W&B integration is ready.")
         print("\nNext steps:")
-        print("  1. Run: python example_wandb_training.py")
-        print("  2. Run: python train.py --train_data your_data.jsonl")
-        print("  3. Run: python local_train_medxpert.py --data-dir data")
+        print("  1. Run: python examples/example_wandb_training.py")
+        print("  2. Run: python scripts/training/train.py --train_data your_data.jsonl")
+        print("  3. Run: python scripts/training/local_train_medxpert.py --data-dir data")
     else:
         print("\n⚠️  Some checks failed. Please fix the issues above.")
         print("\nFor help:")
         print("  - W&B Documentation: https://docs.wandb.ai/")
-        print("  - MAPoRL W&B Guide: ./WANDB_INTEGRATION_GUIDE.md")
+        print("  - MAPoRL W&B Guide: ./docs/WANDB_INTEGRATION_GUIDE.md")
     
     return all(checks)
 
