@@ -44,6 +44,8 @@ def setup_sagemaker_environment():
     # Weights & Biases
     os.environ['WANDB_DIR'] = "/opt/ml/output/data"
     os.environ['WANDB_PROJECT'] = "maporl-medxpert-sagemaker"
+    os.environ['WANDB_LOG_MODEL'] = "checkpoint"
+    os.environ['WANDB_WATCH'] = "all"
     
     # Create directories
     for path in ['/opt/ml/model/transformers_cache', '/opt/ml/model/huggingface_cache']:
@@ -187,21 +189,48 @@ def main():
             device="cuda:0"
         )
         
+        # Initialize W&B for SageMaker
+        import wandb
+        from datetime import datetime
+        try:
+            wandb.init(
+                project="maporl-medxpert-sagemaker",
+                name=f"sagemaker-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
+                group="sagemaker-training",
+                tags=["sagemaker", "medxpert", "qwen", "multi-agent", "4gpu"],
+                config={
+                    **config,
+                    "train_samples": len(train_dataset),
+                    "eval_samples": len(eval_dataset),
+                    "infrastructure": "sagemaker-ml.g5.12xlarge"
+                }
+            )
+            logger.info(f"W&B initialized: {wandb.run.url}")
+        except Exception as e:
+            logger.warning(f"Failed to initialize W&B: {e}")
+        
         # Start training
         logger.info("🚀 Starting training...")
         trainer.train(train_dataset, eval_dataset)
-        
-        # Save final results
-        results = {
-            "status": "completed",
-            "model_type": "Qwen3-0.6B",
-            "num_agents": 4,
-            "target_benchmark": "MedXpert",
-            "train_samples": len(train_dataset),
-            "eval_samples": len(eval_dataset),
-            "epochs": config['num_epochs'],
-            "learning_rate": config['learning_rate']
-        }
+    
+    # Save final results
+    results = {
+        "status": "completed",
+        "model_type": "Qwen3-0.6B",
+        "num_agents": 4,
+        "target_benchmark": "MedXpert",
+        "train_samples": len(train_dataset),
+        "eval_samples": len(eval_dataset),
+        "epochs": config['num_epochs'],
+        "learning_rate": config['learning_rate']
+    }
+    
+            # Log final results to W&B
+        try:
+            wandb.log(results)
+            wandb.finish()
+        except Exception:
+            pass
         
         results_path = os.path.join(os.environ['SM_OUTPUT_DATA_DIR'], 'training_results.json')
         with open(results_path, 'w') as f:

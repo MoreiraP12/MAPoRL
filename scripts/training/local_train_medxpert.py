@@ -540,7 +540,32 @@ def main():
     parser.add_argument("--output-dir", type=str, default="outputs", help="Output directory for models and results")
     parser.add_argument("--test-only", action="store_true", help="Only run testing on existing models")
     
+    # W&B arguments
+    parser.add_argument("--wandb-project", type=str, default="maporl-medxpert-local", help="W&B project name")
+    parser.add_argument("--wandb-name", type=str, help="W&B run name")
+    parser.add_argument("--wandb-group", type=str, default="local-training", help="W&B group name")
+    parser.add_argument("--wandb-tags", type=str, nargs="+", default=["medxpert", "qwen", "local", "multi-agent"], help="W&B tags")
+    parser.add_argument("--wandb-notes", type=str, help="W&B run notes")
+    parser.add_argument("--disable-wandb", action="store_true", help="Disable W&B logging")
+    
     args = parser.parse_args()
+    
+    # Setup W&B configuration
+    wandb_config = {
+        "project": args.wandb_project,
+        "name": args.wandb_name,
+        "group": args.wandb_group,
+        "tags": args.wandb_tags,
+        "notes": args.wandb_notes,
+        "disable_wandb": args.disable_wandb,
+        "extra_config": {
+            "data_dir": args.data_dir,
+            "output_dir": args.output_dir,
+            "test_only": args.test_only,
+            "gpu_count": torch.cuda.device_count(),
+            "cuda_available": torch.cuda.is_available()
+        }
+    }
     
     print("🏥 Local Medical Multi-Agent Training")
     print("=" * 50)
@@ -548,9 +573,12 @@ def main():
     print(f"📁 Data directory: {args.data_dir}")
     print(f"📁 Output directory: {args.output_dir}")
     print(f"🖥️ Available GPUs: {torch.cuda.device_count()}")
+    print(f"📈 W&B logging: {'Disabled' if args.disable_wandb else 'Enabled'}")
+    if not args.disable_wandb:
+        print(f"📈 W&B project: {args.wandb_project}")
     print("=" * 50)
     
-    trainer = LocalMedicalTrainer(args.data_dir, args.output_dir)
+    trainer = LocalMedicalTrainer(args.data_dir, args.output_dir, wandb_config)
     
     try:
         if args.test_only:
@@ -567,10 +595,18 @@ def main():
             print(f"📊 Trained {training_results['total_agents']} agents")
             print(f"📁 Check results in: {args.output_dir}/")
             
+        # Finish W&B run
+        if not args.disable_wandb:
+            wandb.finish()
+            
     except KeyboardInterrupt:
         print("\n⚠️ Training interrupted by user")
+        if not args.disable_wandb:
+            wandb.finish(exit_code=1)
     except Exception as e:
         print(f"\n❌ Training failed: {e}")
+        if not args.disable_wandb:
+            wandb.finish(exit_code=1)
         raise
 
 if __name__ == "__main__":
