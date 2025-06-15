@@ -1,245 +1,508 @@
 """
-Medical Researcher Agent - Gathers evidence and medical knowledge.
+Medical Researcher Agent with BioMCP Integration - Enhanced with real biomedical data access.
 """
 
-from typing import Dict, List, Any, Tuple
 import logging
-import json
+import re
+import asyncio
+from typing import Dict, List, Any, Tuple, Optional
 from .base_agent import BaseMedicalAgent, MedicalState
+
+# BioMCP integration
+try:
+    import subprocess
+    import json
+    import tempfile
+    import os
+    BIOMCP_AVAILABLE = True
+except ImportError:
+    BIOMCP_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
 class MedicalResearcherAgent(BaseMedicalAgent):
-    """Agent responsible for researching medical evidence and guidelines."""
+    """Enhanced researcher agent with BioMCP integration for real biomedical data access."""
     
     def __init__(self, model_config: dict):
         super().__init__("researcher", model_config)
-        self.medical_databases = {
-            "guidelines": [
-                "American College of Physicians (ACP)",
-                "American Heart Association (AHA)",
-                "Centers for Disease Control (CDC)",
-                "World Health Organization (WHO)",
-                "National Institutes of Health (NIH)"
+        self.biomcp_available = BIOMCP_AVAILABLE
+        self.research_frameworks = {
+            "evidence_based_medicine": [
+                "Clinical guidelines",
+                "Systematic reviews",
+                "Randomized controlled trials",
+                "Meta-analyses"
             ],
-            "evidence_levels": {
-                "Level 1": "Systematic reviews and meta-analyses",
-                "Level 2": "Randomized controlled trials",
-                "Level 3": "Cohort studies",
-                "Level 4": "Case-control studies",
-                "Level 5": "Case series and expert opinion"
-            }
+            "clinical_research": [
+                "Phase I-IV trials",
+                "Observational studies",
+                "Case-control studies",
+                "Cohort studies"
+            ],
+            "genomic_research": [
+                "Variant analysis",
+                "Pharmacogenomics",
+                "Disease associations",
+                "Functional studies"
+            ]
         }
         
-        # Simulated medical knowledge base (in real implementation, this would be a vector database)
-        self.knowledge_base = {
-            "hypertension": {
-                "definition": "Blood pressure consistently above 140/90 mmHg",
-                "guidelines": "JNC 8, AHA/ACC 2017",
-                "first_line_treatment": "ACE inhibitors, ARBs, thiazide diuretics, CCBs",
-                "monitoring": "Regular BP checks, kidney function, electrolytes"
-            },
-            "diabetes": {
-                "definition": "Fasting glucose ≥126 mg/dL or HbA1c ≥6.5%",
-                "guidelines": "ADA Standards of Care",
-                "first_line_treatment": "Metformin, lifestyle modifications",
-                "monitoring": "HbA1c every 3-6 months, annual eye/foot exams"
-            },
-            "pneumonia": {
-                "definition": "Infection of lung parenchyma",
-                "guidelines": "IDSA/ATS Guidelines",
-                "first_line_treatment": "Antibiotics based on severity and risk factors",
-                "monitoring": "Clinical response, chest imaging"
-            }
+        # Initialize BioMCP if available
+        if self.biomcp_available:
+            self._setup_biomcp()
+        
+        self.medical_databases = [
+            "PubMed", "ClinicalTrials.gov", "Cochrane Library",
+            "MyVariant.info", "ClinVar", "OMIM"
+        ]
+        
+        self.evidence_levels = {
+            "systematic_review": 5,
+            "rct": 4,
+            "cohort_study": 3,
+            "case_control": 2,
+            "case_series": 1
         }
     
+    def _setup_biomcp(self):
+        """Setup BioMCP connection and verify availability."""
+        try:
+            # Test BioMCP availability
+            result = subprocess.run(
+                ["uv", "run", "--with", "biomcp-python", "biomcp", "--help"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode == 0:
+                logger.info("✅ BioMCP successfully configured")
+                self.biomcp_ready = True
+            else:
+                logger.warning("⚠️ BioMCP not properly configured")
+                self.biomcp_ready = False
+        except Exception as e:
+            logger.warning(f"⚠️ BioMCP setup failed: {e}")
+            self.biomcp_ready = False
+    
     def get_role_description(self) -> str:
-        """Return description of researcher role."""
-        return """You are a Medical Researcher Agent. Your role is to:
-1. Search for and synthesize relevant medical evidence
-2. Identify current clinical guidelines and best practices
-3. Provide evidence-based information to support decision-making
-4. Assess the quality and reliability of medical information
-5. Stay current with medical literature and recommendations
+        """Return description of researcher role with BioMCP capabilities."""
+        return """You are a Medical Researcher Agent with access to real-time biomedical data through BioMCP. Your role is to:
+1. Search clinical trials and research literature
+2. Gather evidence-based medical information
+3. Access genomic variant data and clinical guidelines
+4. Evaluate research quality and evidence levels
+5. Provide comprehensive background research for medical questions
 
-Focus on evidence-based medicine, cite relevant guidelines, and provide accurate, up-to-date medical information."""
+You have access to:
+- ClinicalTrials.gov for trial data
+- PubMed/PubTator3 for literature search
+- MyVariant.info for genomic data
+- Real-time biomedical database access through BioMCP
 
-    def search_knowledge_base(self, query_terms: List[str]) -> Dict[str, Any]:
-        """Search the medical knowledge base for relevant information."""
-        results = {}
+Focus on evidence-based medicine and current clinical guidelines."""
+    
+    async def search_clinical_trials(self, condition: str, intervention: str = None, 
+                                   phase: str = None, location: str = None) -> Dict[str, Any]:
+        """Search clinical trials using BioMCP."""
+        if not getattr(self, 'biomcp_ready', False):
+            return {"trials": [], "source": "fallback", "message": "BioMCP not available"}
         
-        for term in query_terms:
-            term_lower = term.lower()
-            for condition, info in self.knowledge_base.items():
-                if term_lower in condition or any(term_lower in str(value).lower() for value in info.values()):
-                    results[condition] = info
+        try:
+            cmd = ["uv", "run", "--with", "biomcp-python", "biomcp", "trial", "search"]
+            cmd.extend(["--condition", condition])
+            
+            if intervention:
+                cmd.extend(["--intervention", intervention])
+            if phase:
+                cmd.extend(["--phase", phase])
+            if location:
+                cmd.extend(["--location", location])
+            
+            cmd.extend(["--format", "json", "--limit", "10"])
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                trials_data = json.loads(result.stdout)
+                logger.info(f"🔬 Found {len(trials_data.get('results', []))} clinical trials")
+                return {
+                    "trials": trials_data.get('results', []),
+                    "source": "ClinicalTrials.gov",
+                    "query": condition,
+                    "count": len(trials_data.get('results', []))
+                }
+            else:
+                logger.warning(f"Clinical trial search failed: {result.stderr}")
+                return {"trials": [], "source": "error", "message": result.stderr}
+                
+        except Exception as e:
+            logger.error(f"Error searching clinical trials: {e}")
+            return {"trials": [], "source": "error", "message": str(e)}
+    
+    async def search_literature(self, query: str, gene: str = None, 
+                              disease: str = None, limit: int = 10) -> Dict[str, Any]:
+        """Search biomedical literature using BioMCP."""
+        if not getattr(self, 'biomcp_ready', False):
+            return {"articles": [], "source": "fallback", "message": "BioMCP not available"}
         
-        return results
-
-    def assess_evidence_quality(self, source: str, study_type: str = "unknown") -> Dict[str, Any]:
-        """Assess the quality of medical evidence."""
-        assessment = {
-            "evidence_level": "Level 5",  # Default to lowest level
-            "reliability": "Low",
-            "recommendation_strength": "Weak"
+        try:
+            cmd = ["uv", "run", "--with", "biomcp-python", "biomcp", "article", "search"]
+            cmd.extend(["--query", query])
+            
+            if gene:
+                cmd.extend(["--gene", gene])
+            if disease:
+                cmd.extend(["--disease", disease])
+            
+            cmd.extend(["--format", "json", "--limit", str(limit)])
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                articles_data = json.loads(result.stdout)
+                logger.info(f"📚 Found {len(articles_data.get('results', []))} articles")
+                return {
+                    "articles": articles_data.get('results', []),
+                    "source": "PubMed",
+                    "query": query,
+                    "count": len(articles_data.get('results', []))
+                }
+            else:
+                logger.warning(f"Literature search failed: {result.stderr}")
+                return {"articles": [], "source": "error", "message": result.stderr}
+                
+        except Exception as e:
+            logger.error(f"Error searching literature: {e}")
+            return {"articles": [], "source": "error", "message": str(e)}
+    
+    async def search_variants(self, gene: str = None, significance: str = None,
+                            variant_type: str = None) -> Dict[str, Any]:
+        """Search genetic variants using BioMCP."""
+        if not getattr(self, 'biomcp_ready', False):
+            return {"variants": [], "source": "fallback", "message": "BioMCP not available"}
+        
+        try:
+            cmd = ["uv", "run", "--with", "biomcp-python", "biomcp", "variant", "search"]
+            
+            if gene:
+                cmd.extend(["--gene", gene])
+            if significance:
+                cmd.extend(["--significance", significance])
+            if variant_type:
+                cmd.extend(["--type", variant_type])
+            
+            cmd.extend(["--format", "json", "--limit", "10"])
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                variants_data = json.loads(result.stdout)
+                logger.info(f"🧬 Found {len(variants_data.get('results', []))} variants")
+                return {
+                    "variants": variants_data.get('results', []),
+                    "source": "MyVariant.info",
+                    "query": gene or "general",
+                    "count": len(variants_data.get('results', []))
+                }
+            else:
+                logger.warning(f"Variant search failed: {result.stderr}")
+                return {"variants": [], "source": "error", "message": result.stderr}
+                
+        except Exception as e:
+            logger.error(f"Error searching variants: {e}")
+            return {"variants": [], "source": "error", "message": str(e)}
+    
+    def extract_research_entities(self, text: str) -> Dict[str, List[str]]:
+        """Extract medical entities relevant to research from text."""
+        entities = {
+            "conditions": [],
+            "interventions": [],
+            "genes": [],
+            "drugs": [],
+            "study_types": []
         }
         
-        # Assess based on source
-        if any(db in source.lower() for db in ["cochrane", "pubmed", "nejm", "jama"]):
-            assessment["reliability"] = "High"
-        elif any(db in source.lower() for db in ["uptodate", "guidelines", "consensus"]):
-            assessment["reliability"] = "Moderate"
+        text_lower = text.lower()
         
-        # Assess based on study type
-        if "meta-analysis" in study_type.lower() or "systematic review" in study_type.lower():
-            assessment["evidence_level"] = "Level 1"
-            assessment["recommendation_strength"] = "Strong"
-        elif "randomized" in study_type.lower() or "rct" in study_type.lower():
-            assessment["evidence_level"] = "Level 2"
-            assessment["recommendation_strength"] = "Moderate"
-        elif "cohort" in study_type.lower():
-            assessment["evidence_level"] = "Level 3"
-            assessment["recommendation_strength"] = "Moderate"
+        # Extract conditions (simple pattern matching)
+        condition_patterns = [
+            r'\b(?:cancer|carcinoma|tumor|malignancy)\b',
+            r'\b(?:diabetes|hypertension|depression|asthma)\b',
+            r'\b(?:covid|pneumonia|influenza|infection)\b',
+            r'\b(?:alzheimer|parkinson|dementia)\b'
+        ]
         
-        return assessment
-
-    def generate_evidence_summary(self, medical_entities: List[str]) -> Dict[str, Any]:
-        """Generate a summary of available evidence for medical entities."""
-        evidence_summary = {}
+        for pattern in condition_patterns:
+            matches = re.findall(pattern, text_lower)
+            entities["conditions"].extend(matches)
         
-        # Search knowledge base
-        knowledge_results = self.search_knowledge_base(medical_entities)
+        # Extract gene names (simplified)
+        gene_pattern = r'\b[A-Z]{2,}[0-9]*\b'
+        potential_genes = re.findall(gene_pattern, text)
+        # Filter for likely gene names
+        common_genes = ["TP53", "BRCA1", "BRCA2", "EGFR", "KRAS", "PIK3CA", "APC", "PTEN"]
+        entities["genes"] = [g for g in potential_genes if g in common_genes or len(g) <= 6]
         
-        for condition, info in knowledge_results.items():
-            evidence_summary[condition] = {
-                "clinical_info": info,
-                "evidence_assessment": self.assess_evidence_quality(info.get("guidelines", ""), "guideline"),
-                "key_recommendations": []
-            }
+        # Extract interventions
+        intervention_patterns = [
+            r'\b(?:chemotherapy|radiation|surgery|immunotherapy)\b',
+            r'\b(?:treatment|therapy|intervention|medication)\b'
+        ]
+        
+        for pattern in intervention_patterns:
+            matches = re.findall(pattern, text_lower)
+            entities["interventions"].extend(matches)
+        
+        # Extract study types
+        study_patterns = [
+            r'\b(?:randomized|controlled|trial|rct)\b',
+            r'\b(?:cohort|case-control|observational)\b',
+            r'\b(?:meta-analysis|systematic review)\b'
+        ]
+        
+        for pattern in study_patterns:
+            matches = re.findall(pattern, text_lower)
+            entities["study_types"].extend(matches)
+        
+        # Remove duplicates
+        for key in entities:
+            entities[key] = list(set(entities[key]))
+        
+        return entities
+    
+    async def conduct_comprehensive_research(self, question: str, context: str) -> Dict[str, Any]:
+        """Conduct comprehensive research using BioMCP tools."""
+        research_results = {
+            "clinical_trials": {"data": [], "source": "none"},
+            "literature": {"data": [], "source": "none"},
+            "variants": {"data": [], "source": "none"},
+            "research_quality": "unknown",
+            "evidence_level": 0
+        }
+        
+        # Extract research entities
+        combined_text = f"{question} {context}"
+        entities = self.extract_research_entities(combined_text)
+        
+        # Search clinical trials
+        if entities["conditions"]:
+            main_condition = entities["conditions"][0] if entities["conditions"] else None
+            main_intervention = entities["interventions"][0] if entities["interventions"] else None
             
-            # Generate key recommendations based on available info
-            if "first_line_treatment" in info:
-                evidence_summary[condition]["key_recommendations"].append(
-                    f"First-line treatment: {info['first_line_treatment']}"
+            if main_condition:
+                trials_result = await self.search_clinical_trials(
+                    condition=main_condition,
+                    intervention=main_intervention
                 )
-            if "monitoring" in info:
-                evidence_summary[condition]["key_recommendations"].append(
-                    f"Monitoring: {info['monitoring']}"
-                )
+                research_results["clinical_trials"] = trials_result
         
-        return evidence_summary
-
+        # Search literature
+        literature_query = question[:100]  # Truncate for API
+        if entities["genes"]:
+            gene = entities["genes"][0]
+            disease = entities["conditions"][0] if entities["conditions"] else None
+            literature_result = await self.search_literature(
+                query=literature_query,
+                gene=gene,
+                disease=disease
+            )
+        else:
+            literature_result = await self.search_literature(query=literature_query)
+        
+        research_results["literature"] = literature_result
+        
+        # Search variants if genetic context
+        if entities["genes"]:
+            variants_result = await self.search_variants(
+                gene=entities["genes"][0],
+                significance="pathogenic"
+            )
+            research_results["variants"] = variants_result
+        
+        # Assess research quality
+        research_results["research_quality"] = self.assess_research_quality(research_results)
+        research_results["evidence_level"] = self.calculate_evidence_level(research_results)
+        
+        return research_results
+    
+    def assess_research_quality(self, research_results: Dict[str, Any]) -> str:
+        """Assess the quality of research results."""
+        quality_score = 0
+        
+        # Check clinical trials availability
+        if research_results["clinical_trials"]["data"]:
+            quality_score += 2
+        
+        # Check literature availability
+        if research_results["literature"]["data"]:
+            quality_score += 2
+        
+        # Check variant data availability
+        if research_results["variants"]["data"]:
+            quality_score += 1
+        
+        # Check for RCTs or systematic reviews
+        literature_data = research_results["literature"]["data"]
+        if any("randomized" in str(article).lower() or "systematic" in str(article).lower() 
+               for article in literature_data):
+            quality_score += 2
+        
+        if quality_score >= 5:
+            return "high"
+        elif quality_score >= 3:
+            return "moderate"
+        else:
+            return "low"
+    
+    def calculate_evidence_level(self, research_results: Dict[str, Any]) -> int:
+        """Calculate evidence level based on available research."""
+        evidence_level = 1  # Base level
+        
+        # Boost for clinical trials
+        if research_results["clinical_trials"]["data"]:
+            evidence_level += 2
+        
+        # Boost for high-quality literature
+        literature_data = research_results["literature"]["data"]
+        for article in literature_data:
+            article_str = str(article).lower()
+            if "systematic review" in article_str or "meta-analysis" in article_str:
+                evidence_level += 3
+                break
+            elif "randomized" in article_str:
+                evidence_level += 2
+                break
+        
+        return min(evidence_level, 5)  # Cap at 5
+    
     def process_state(self, state: MedicalState) -> Tuple[str, Dict[str, Any]]:
-        """Process the current state and provide medical research findings."""
+        """Process the current state and provide research-enhanced response."""
         try:
-            # Extract medical entities from question and previous responses
-            medical_entities = self.extract_medical_entities(state.question + " " + state.context)
-            
-            # Add entities from previous agent responses
-            for agent_responses in state.agent_responses.values():
-                for response in agent_responses:
-                    medical_entities.extend(self.extract_medical_entities(response))
-            
-            # Remove duplicates
-            medical_entities = list(set(medical_entities))
-            
-            # Generate evidence summary
-            evidence_summary = self.generate_evidence_summary(medical_entities)
+            # Conduct comprehensive research
+            research_results = asyncio.run(
+                self.conduct_comprehensive_research(state.question, state.context)
+            )
             
             # Create research context
-            additional_context = f"""
-Medical Entities Identified: {', '.join(medical_entities)}
-Evidence Search Focus: Current guidelines, treatment recommendations, and monitoring protocols
+            research_context = f"""
+Research Database Access: {'✅ BioMCP Active' if getattr(self, 'biomcp_ready', False) else '❌ BioMCP Unavailable'}
 
-Provide evidence-based research findings and recommendations.
+Clinical Trials Found: {research_results['clinical_trials'].get('count', 0)}
+Literature Articles: {research_results['literature'].get('count', 0)}
+Genetic Variants: {research_results['variants'].get('count', 0)}
+
+Research Quality: {research_results['research_quality']}
+Evidence Level: {research_results['evidence_level']}/5
+
+Focus on evidence-based research and current clinical guidelines.
 """
             
-            prompt = self.format_prompt(state, additional_context)
+            prompt = self.format_prompt(state, research_context)
             response = self.generate_response(prompt)
             
-            # Enhance response with evidence summary
-            structured_response = f"""
-MEDICAL RESEARCH FINDINGS:
+            # Enhance response with research findings
+            enhanced_response = f"""
+RESEARCH FINDINGS:
 
-Key Medical Entities: {', '.join(medical_entities)}
-
-Evidence-Based Information:
 """
             
-            for condition, evidence in evidence_summary.items():
-                structured_response += f"""
-{condition.upper()}:
-- Definition: {evidence['clinical_info'].get('definition', 'Not available')}
-- Clinical Guidelines: {evidence['clinical_info'].get('guidelines', 'Not specified')}
-- Evidence Level: {evidence['evidence_assessment']['evidence_level']}
-- Key Recommendations: {'; '.join(evidence['key_recommendations'])}
-"""
+            # Add clinical trials information
+            if research_results["clinical_trials"]["data"]:
+                enhanced_response += f"🔬 Clinical Trials ({research_results['clinical_trials']['source']}):\n"
+                for i, trial in enumerate(research_results["clinical_trials"]["data"][:3]):
+                    title = trial.get("title", "Unknown Trial")
+                    status = trial.get("status", "Unknown")
+                    enhanced_response += f"  {i+1}. {title} (Status: {status})\n"
+                enhanced_response += "\n"
             
-            structured_response += f"""
-Additional Research Context:
+            # Add literature information
+            if research_results["literature"]["data"]:
+                enhanced_response += f"📚 Recent Literature ({research_results['literature']['source']}):\n"
+                for i, article in enumerate(research_results["literature"]["data"][:3]):
+                    title = article.get("title", "Unknown Article")
+                    journal = article.get("journal", "Unknown Journal")
+                    enhanced_response += f"  {i+1}. {title}\n     Journal: {journal}\n"
+                enhanced_response += "\n"
+            
+            # Add variant information
+            if research_results["variants"]["data"]:
+                enhanced_response += f"🧬 Genetic Variants ({research_results['variants']['source']}):\n"
+                for i, variant in enumerate(research_results["variants"]["data"][:2]):
+                    variant_id = variant.get("id", "Unknown Variant")
+                    significance = variant.get("clinical_significance", "Unknown")
+                    enhanced_response += f"  {i+1}. {variant_id} (Significance: {significance})\n"
+                enhanced_response += "\n"
+            
+            enhanced_response += f"""
+EVIDENCE-BASED ANALYSIS:
 {response}
 
-Evidence Quality Assessment:
-- Sources consulted: Medical guidelines and established protocols
-- Recommendation strength: Based on available evidence levels
-- Clinical relevance: High for identified medical entities
+Research Quality Assessment: {research_results['research_quality'].upper()}
+Evidence Level: {research_results['evidence_level']}/5 ({self.get_evidence_description(research_results['evidence_level'])})
+
+Data Sources: {', '.join([
+    research_results['clinical_trials']['source'],
+    research_results['literature']['source'],
+    research_results['variants']['source']
+])}
 """
             
             # Update response history
-            self.update_response_history(structured_response)
+            self.update_response_history(enhanced_response)
             
             # Extract medical entities and assess safety
-            medical_entities_final = self.extract_medical_entities(structured_response)
-            safety_flags = self.assess_safety(structured_response)
+            medical_entities = self.extract_medical_entities(enhanced_response)
+            safety_flags = self.assess_safety(enhanced_response)
             
             metadata = {
                 "agent_name": self.agent_name,
-                "evidence_summary": evidence_summary,
-                "medical_entities": medical_entities_final,
+                "research_results": research_results,
+                "biomcp_available": getattr(self, 'biomcp_ready', False),
+                "evidence_level": research_results['evidence_level'],
+                "research_quality": research_results['research_quality'],
+                "medical_entities": medical_entities,
                 "safety_flags": safety_flags,
-                "confidence": 0.7,  # Moderate confidence based on knowledge base
-                "evidence_quality": "moderate"
+                "confidence": min(0.3 + (research_results['evidence_level'] * 0.15), 0.9)
             }
             
-            return structured_response, metadata
+            return enhanced_response, metadata
             
         except Exception as e:
             logger.error(f"Error in researcher processing: {e}")
+            
+            # Fallback response
             fallback_response = f"""
-BASIC RESEARCH FINDINGS:
+RESEARCH ANALYSIS (Fallback Mode):
 
-Medical Question: {state.question}
+Question: {state.question}
 Context: {state.context}
 
-Recommendation: Consult current medical guidelines and evidence-based resources for:
-- Diagnosis and treatment protocols
-- Monitoring requirements
-- Safety considerations
-- Patient-specific factors
+Research Approach:
+1. Systematic literature review needed
+2. Clinical trial database search recommended
+3. Evidence-based medicine principles applied
+4. Current clinical guidelines consultation required
 
-Error in detailed research: {str(e)}
+Note: Advanced research tools temporarily unavailable.
+Error: {str(e)}
 """
+            
             metadata = {
                 "agent_name": self.agent_name,
                 "error": str(e),
-                "confidence": 0.2
+                "biomcp_available": False,
+                "confidence": 0.3
             }
+            
             return fallback_response, metadata
-
-    def update_knowledge_base(self, new_knowledge: Dict[str, Any]):
-        """Update the medical knowledge base with new information."""
-        for condition, info in new_knowledge.items():
-            if condition in self.knowledge_base:
-                self.knowledge_base[condition].update(info)
-            else:
-                self.knowledge_base[condition] = info
-
-    def get_evidence_citations(self, topic: str) -> List[str]:
-        """Generate mock evidence citations for a given topic."""
-        citations = [
-            f"Clinical Practice Guidelines for {topic} - Professional Medical Association",
-            f"Systematic Review: {topic} Management - Cochrane Database",
-            f"Evidence-Based Treatment of {topic} - Medical Journal",
-            f"Clinical Decision Support for {topic} - UpToDate"
-        ]
-        return citations 
+    
+    def get_evidence_description(self, level: int) -> str:
+        """Get description for evidence level."""
+        descriptions = {
+            1: "Expert opinion/Case reports",
+            2: "Case-control studies",
+            3: "Cohort studies",
+            4: "Randomized controlled trials",
+            5: "Systematic reviews/Meta-analyses"
+        }
+        return descriptions.get(level, "Unknown") 
