@@ -10,7 +10,7 @@ set -e  # Exit on any error
 echo "🏥 Starting Medical Multi-Agent MAPoRL Training on SageMaker"
 echo "📊 Target Benchmark: MedXpert"
 echo "🚀 Hardware: 4x A10G GPUs"
-echo "🤖 Models: Qwen2.5-0.5B-Instruct (4 agents)"
+echo "🤖 Models: Qwen3-0.6B (4 agents)"
 
 # ==============================================================================
 # Environment Setup
@@ -126,7 +126,7 @@ python -c "
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 
-model_name = 'Qwen/Qwen2.5-0.5B-Instruct'
+model_name = 'Qwen/Qwen3-0.6B'
 print(f'Downloading {model_name}...')
 
 tokenizer = AutoTokenizer.from_pretrained(
@@ -296,7 +296,7 @@ echo "🎯 Starting MedXpert training with MAPoRL..."
 
 # Set additional training environment variables
 export WANDB_PROJECT="maporl-medxpert"
-export WANDB_RUN_NAME="qwen-0.5b-4gpu-$(date +%Y%m%d-%H%M%S)"
+export WANDB_RUN_NAME="qwen-0.6b-4gpu-$(date +%Y%m%d-%H%M%S)"
 export WANDB_TAGS="medxpert,qwen,maporl,sagemaker,4gpu"
 
 # Run training with proper error handling
@@ -328,7 +328,7 @@ from pathlib import Path
 output_path = Path('/opt/ml/output/data')
 summary = {
     'training_status': 'completed',
-    'model_type': 'Qwen2.5-0.5B-Instruct',
+    'model_type': 'Qwen3-0.6B',
     'num_agents': 4,
     'target_benchmark': 'MedXpert',
     'gpu_config': '4x A10G',
@@ -370,7 +370,7 @@ fi
 echo ""
 echo "🎉 SageMaker MedXpert Training Pipeline Completed!"
 echo "📊 Benchmark: MedXpert"
-echo "🤖 Models: 4x Qwen2.5-0.5B-Instruct agents"
+echo "🤖 Models: 4x Qwen3-0.6B agents"
 echo "🚀 Framework: MAPoRL multi-agent training"
 echo "💾 Outputs saved to: $OUTPUT_PATH"
 echo "📈 Logs and metrics available in W&B"

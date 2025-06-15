@@ -11,6 +11,7 @@ from sagemaker.inputs import TrainingInput
 import json
 import os
 from datetime import datetime
+import time
 
 def create_sagemaker_training_job():
     """Create and launch SageMaker training job for MedXpert MAPoRL."""
@@ -105,7 +106,7 @@ def create_sagemaker_training_job():
     
     print("🚀 Launching SageMaker training job...")
     print(f"📊 Instance Type: ml.g5.12xlarge (4x A10G GPUs)")
-    print(f"🤖 Model: Qwen2.5-0.5B-Instruct (4 agents)")
+    print(f"🤖 Model: Qwen3-0.6B (4 agents)")
     print(f"📈 Expected Training Time: 2-3 hours")
     
     # Launch training job

@@ -20,7 +20,7 @@ This guide provides complete instructions for training medical multi-agent syste
 
 ### Multi-Agent Configuration
 - **4 Agents**: Medical Planner, Researcher, Analyst, Reporter
-- **Models**: Qwen2.5-0.5B-Instruct (optimized for medical tasks)
+- **Models**: Qwen3-0.6B (optimized for medical tasks)
 - **Hardware**: 4x A10G GPUs (`ml.g5.12xlarge` instance)
 - **Framework**: LangGraph + MAPoRL collaborative training
 
@@ -264,7 +264,7 @@ After training completion:
 
 - [MAPoRL Paper](https://arxiv.org/abs/2310.16884)
 - [MedXpert Benchmark](https://github.com/openmedlab/MedXpert)
-- [Qwen2.5 Models](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct)
+- [Qwen3 Models](https://huggingface.co/Qwen/Qwen3-0.6B)
 - [SageMaker PyTorch](https://sagemaker.readthedocs.io/en/stable/frameworks/pytorch/index.html)
 
 ## 📞 Support

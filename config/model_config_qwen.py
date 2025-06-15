@@ -6,6 +6,11 @@ Optimized for MedXpert benchmark training.
 import torch
 from dataclasses import dataclass
 from typing import Dict, List, Optional
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import BitsAndBytesConfig
+import logging
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class ModelConfig:
@@ -30,7 +35,7 @@ class MultiAgentConfig:
 # Qwen3 0.6B models optimized for medical tasks and GPU constraints
 QWEN_MEDICAL_AGENT_CONFIGS = {
     "planner": ModelConfig(
-        model_name="Qwen/Qwen2.5-0.5B-Instruct",  # Using available Qwen 0.5B as proxy for 0.6B
+        model_name="Qwen/Qwen3-0.6B",
         max_length=1024,
         temperature=0.7,
         top_p=0.9,
@@ -40,7 +45,7 @@ QWEN_MEDICAL_AGENT_CONFIGS = {
         torch_dtype="float16"
     ),
     "researcher": ModelConfig(
-        model_name="Qwen/Qwen2.5-0.5B-Instruct",
+        model_name="Qwen/Qwen3-0.6B",
         max_length=1024,
         temperature=0.5,
         top_p=0.8,
@@ -50,7 +55,7 @@ QWEN_MEDICAL_AGENT_CONFIGS = {
         torch_dtype="float16"
     ),
     "analyst": ModelConfig(
-        model_name="Qwen/Qwen2.5-0.5B-Instruct",
+        model_name="Qwen/Qwen3-0.6B",
         max_length=1024,
         temperature=0.6,
         top_p=0.9,
@@ -60,7 +65,7 @@ QWEN_MEDICAL_AGENT_CONFIGS = {
         torch_dtype="float16"
     ),
     "reporter": ModelConfig(
-        model_name="Qwen/Qwen2.5-0.5B-Instruct",
+        model_name="Qwen/Qwen3-0.6B",
         max_length=1024,
         temperature=0.4,
         top_p=0.8,
@@ -157,4 +162,106 @@ MEDXPERT_DATA_CONFIG = {
     "context_field": "context", 
     "answer_field": "answer",
     "id_field": "id"
-} 
+}
+
+def get_qwen_config():
+    """
+    Optimized Qwen3-0.6B configuration for SageMaker A10G GPUs
+    """
+    return {
+        # Model Configuration
+        "model_name": "Qwen/Qwen3-0.6B",  # Using official Qwen3 0.6B model
+        "torch_dtype": torch.float16,
+        "device_map": "auto",
+        "trust_remote_code": True,
+        
+        # Quantization for A10G memory constraints
+        "quantization_config": BitsAndBytesConfig(
+            load_in_8bit=True,
+            bnb_8bit_compute_dtype=torch.float16,
+            bnb_8bit_quant_type="nf8",
+            bnb_8bit_use_double_quant=True,
+        ),
+        
+        # Generation parameters optimized for medical reasoning
+        "generation_config": {
+            "max_new_tokens": 512,
+            "temperature": 0.6,  # Balanced for medical accuracy
+            "top_p": 0.95,
+            "top_k": 20,
+            "do_sample": True,
+            "pad_token_id": None,  # Will be set dynamically
+            "eos_token_id": None,  # Will be set dynamically
+        },
+        
+        # Memory optimization
+        "gradient_checkpointing": True,
+        "use_cache": False,  # Saves memory during training
+    }
+
+# Agent-specific configurations
+AGENT_CONFIGS = {
+    "planner": {
+        "model_name": "Qwen/Qwen3-0.6B",
+        "device": "cuda:0",
+        "max_tokens": 256,
+        "temperature": 0.7,
+    },
+    "researcher": {
+        "model_name": "Qwen/Qwen3-0.6B",
+        "device": "cuda:1", 
+        "max_tokens": 512,
+        "temperature": 0.6,
+    },
+    "analyst": {
+        "model_name": "Qwen/Qwen3-0.6B",
+        "device": "cuda:2",
+        "max_tokens": 512,
+        "temperature": 0.5,
+    },
+    "reporter": {
+        "model_name": "Qwen/Qwen3-0.6B",
+        "device": "cuda:3",
+        "max_tokens": 1024,
+        "temperature": 0.4,
+    }
+}
+
+def load_qwen_model(agent_type="base", device="cuda:0"):
+    """
+    Load Qwen3-0.6B model with optimizations for specific agent
+    """
+    config = get_qwen_config()
+    agent_config = AGENT_CONFIGS.get(agent_type, AGENT_CONFIGS["planner"])
+    
+    try:
+        # Load tokenizer
+        tokenizer = AutoTokenizer.from_pretrained(
+            agent_config["model_name"],
+            trust_remote_code=True,
+            padding_side="left"  # Important for batch inference
+        )
+        
+        # Set special tokens if not present
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+            
+        # Load model with quantization
+        model = AutoModelForCausalLM.from_pretrained(
+            agent_config["model_name"],
+            torch_dtype=config["torch_dtype"],
+            device_map={"": device},
+            quantization_config=config["quantization_config"],
+            trust_remote_code=True,
+        )
+        
+        # Enable gradient checkpointing for memory efficiency
+        if hasattr(model, 'gradient_checkpointing_enable'):
+            model.gradient_checkpointing_enable()
+            
+        logger.info(f"✅ Loaded {agent_type} agent with Qwen3-0.6B on {device}")
+        return model, tokenizer
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to load Qwen3-0.6B for {agent_type}: {e}")
+        raise 

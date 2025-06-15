@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-SageMaker Training Entrypoint for Medical Multi-Agent MAPoRL
-Optimized for MedXpert benchmark on 4x A10G GPUs with Qwen2.5-0.5B models
+SageMaker Training Entry Point for Medical Multi-Agent System
+Optimized for MedXpert benchmark on 4x A10G GPUs with Qwen3-0.6B models
 """
 
 import os
@@ -84,7 +84,7 @@ def create_training_config() -> Dict[str, Any]:
     """Create training configuration optimized for MedXpert and SageMaker."""
     return {
         # Model configuration
-        "model_name": "Qwen/Qwen2.5-0.5B-Instruct",
+        "model_name": "Qwen/Qwen3-0.6B",
         "max_length": 1024,
         "load_in_8bit": True,
         "torch_dtype": "float16",
@@ -194,7 +194,7 @@ def main():
         # Save final results
         results = {
             "status": "completed",
-            "model_type": "Qwen2.5-0.5B-Instruct",
+            "model_type": "Qwen3-0.6B",
             "num_agents": 4,
             "target_benchmark": "MedXpert",
             "train_samples": len(train_dataset),
@@ -235,7 +235,7 @@ def main():
         # Save fallback results
         fallback_results = {
             "status": "fallback_completed",
-            "model_type": "Qwen2.5-0.5B-Instruct",
+            "model_type": "Qwen3-0.6B",
             "final_accuracy": accuracy,
             "final_loss": loss,
             "note": "Fallback training simulation due to import issues"

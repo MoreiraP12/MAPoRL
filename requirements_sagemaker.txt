@@ -1,5 +1,5 @@
 # SageMaker-optimized requirements for Medical Multi-Agent MAPoRL Training
-# Optimized for 4x A10G GPUs with Qwen2.5-0.5B-Instruct models
+# Optimized for 4x A10G GPUs with Qwen3-0.6B models
 
 # Core ML frameworks
 torch==2.1.0
