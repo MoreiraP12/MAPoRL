@@ -1,0 +1,23 @@
+{
+  "total_samples": 10,
+  "training_samples": 8,
+  "validation_samples": 2,
+  "categories": [
+    "endocrinology",
+    "psychiatry",
+    "neurology",
+    "hematology",
+    "gastroenterology",
+    "obstetrics",
+    "infectious_disease",
+    "pulmonology",
+    "cardiology"
+  ],
+  "sources": [
+    "synthetic"
+  ],
+  "difficulty_levels": [
+    "medium",
+    "high"
+  ]
+}
