@@ -8,6 +8,7 @@ import os
 import json
 import torch
 import logging
+import wandb
 from typing import Dict, List, Any, Optional
 from transformers import (
     AutoTokenizer, 
@@ -31,10 +32,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class LocalMedicalTrainer:
-    def __init__(self, data_dir: str = "data", output_dir: str = "outputs"):
+    def __init__(self, data_dir: str = "data", output_dir: str = "outputs", wandb_config: Dict[str, Any] = None):
         self.data_dir = data_dir
         self.output_dir = output_dir
         self.model_name = "Qwen/Qwen3-0.6B"
+        self.wandb_config = wandb_config or {}
         
         # Create output directories
         os.makedirs(output_dir, exist_ok=True)
@@ -59,6 +61,45 @@ class LocalMedicalTrainer:
             "clinical_reasoning": 0.10
         }
         
+        # Initialize W&B
+        self.setup_wandb()
+        
+    def setup_wandb(self):
+        """Setup Weights & Biases logging."""
+        if self.wandb_config.get("disable_wandb", False):
+            logger.info("W&B logging disabled")
+            return
+            
+        try:
+            wandb.init(
+                project=self.wandb_config.get("project", "maporl-medxpert-local"),
+                name=self.wandb_config.get("name", f"local-medxpert-{datetime.now().strftime('%Y%m%d-%H%M%S')}"),
+                group=self.wandb_config.get("group", "local-training"),
+                tags=self.wandb_config.get("tags", ["medxpert", "qwen", "local", "multi-agent"]),
+                notes=self.wandb_config.get("notes", "Local MedXpert multi-agent training"),
+                config={
+                    "model_name": self.model_name,
+                    "agents": list(self.agents.keys()),
+                    "reward_weights": self.reward_weights,
+                    "output_dir": self.output_dir,
+                    "data_dir": self.data_dir,
+                    **self.wandb_config.get("extra_config", {})
+                }
+            )
+            
+            # Log system info
+            wandb.log({
+                "system/gpu_count": torch.cuda.device_count() if torch.cuda.is_available() else 0,
+                "system/cuda_available": torch.cuda.is_available(),
+                "system/pytorch_version": torch.__version__,
+            })
+            
+            logger.info(f"W&B initialized: {wandb.run.url}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to initialize W&B: {e}")
+            logger.info("Continuing without W&B logging")
+    
     def load_jsonl_data(self, filepath: str) -> Dataset:
         """Load JSONL data into Hugging Face Dataset"""
         logger.info(f"📥 Loading data from {filepath}")
@@ -86,6 +127,18 @@ class LocalMedicalTrainer:
         
         dataset = Dataset.from_list(formatted_data)
         logger.info(f"✅ Loaded {len(dataset)} samples")
+        
+        # Log dataset stats to W&B
+        if not self.wandb_config.get("disable_wandb", False):
+            categories = [item['category'] for item in formatted_data]
+            category_counts = {cat: categories.count(cat) for cat in set(categories)}
+            
+            wandb.log({
+                "data/total_samples": len(dataset),
+                "data/categories": category_counts,
+                "data/source_file": filepath
+            })
+        
         return dataset
     
     def setup_model_and_tokenizer(self, agent_type: str = "base"):
@@ -234,8 +287,9 @@ class LocalMedicalTrainer:
             save_total_limit=2,
             eval_strategy="steps",
             
-            # Disable wandb for local training
-            report_to=None,
+            # W&B integration
+            report_to="wandb" if not self.wandb_config.get("disable_wandb", False) else None,
+            run_name=f"{agent_type}-agent" if not self.wandb_config.get("disable_wandb", False) else None,
             
             # Load best model at end
             load_best_model_at_end=True,
@@ -300,6 +354,17 @@ class LocalMedicalTrainer:
             "device": self.agents[agent_type]["device"]
         }
         
+        # Log training stats to W&B
+        if not self.wandb_config.get("disable_wandb", False):
+            wandb.log({
+                f"agent_{agent_type}/final_train_loss": train_result.training_loss,
+                f"agent_{agent_type}/training_time": train_result.metrics.get("train_runtime", 0),
+                f"agent_{agent_type}/train_samples": len(train_dataset),
+                f"agent_{agent_type}/eval_samples": len(eval_dataset),
+                f"agent_{agent_type}/device": self.agents[agent_type]["device"],
+                f"agents_completed": agent_type
+            })
+        
         with open(f"{training_args.output_dir}/training_stats.json", 'w') as f:
             json.dump(training_stats, f, indent=2)
         
@@ -354,9 +419,40 @@ class LocalMedicalTrainer:
             }
         }
         
-        results_file = f"{self.output_dir}/training_results.json"
-        with open(results_file, 'w') as f:
-            json.dump(overall_results, f, indent=2)
+        # Log final summary to W&B
+        if not self.wandb_config.get("disable_wandb", False):
+            # Calculate average training loss across agents
+            avg_loss = sum(r.get("train_loss", 0) for r in all_results) / len(all_results) if all_results else 0
+            total_training_time = sum(r.get("training_time", 0) for r in all_results)
+            
+            wandb.log({
+                "summary/total_agents_trained": len(all_results),
+                "summary/average_train_loss": avg_loss,
+                "summary/total_training_time": total_training_time,
+                "summary/train_samples": len(train_dataset),
+                "summary/eval_samples": len(eval_dataset),
+                "summary/training_date": datetime.now().isoformat()
+            })
+            
+            # Create summary table
+            agent_table = wandb.Table(
+                columns=["Agent", "Train Loss", "Training Time", "Device"],
+                data=[[r["agent_type"], r.get("train_loss", 0), r.get("training_time", 0), r.get("device", "unknown")] 
+                      for r in all_results]
+            )
+            wandb.log({"summary/agent_performance": agent_table})
+            
+            # Save results as artifact
+            artifact = wandb.Artifact("training_results", type="results")
+            results_file = f"{self.output_dir}/training_results.json"
+            with open(results_file, 'w') as f:
+                json.dump(overall_results, f, indent=2)
+            artifact.add_file(results_file)
+            wandb.log_artifact(artifact)
+        else:
+            results_file = f"{self.output_dir}/training_results.json"
+            with open(results_file, 'w') as f:
+                json.dump(overall_results, f, indent=2)
         
         logger.info(f"\n🎉 Training Complete!")
         logger.info(f"📊 Results saved to: {results_file}")
