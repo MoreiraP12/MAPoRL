@@ -266,20 +266,72 @@ class MedicalWorkflow:
             # Execute workflow
             result = self.workflow.invoke(initial_state, config=config)
             
+            # Debug: Log what LangGraph returns
+            logger.info(f"LangGraph result type: {type(result)}")
+            if hasattr(result, '__dict__'):
+                logger.info(f"LangGraph result attributes: {list(result.__dict__.keys())}")
+            elif isinstance(result, dict):
+                logger.info(f"LangGraph result keys: {list(result.keys())}")
+            
+            # Extract state from LangGraph result
+            # LangGraph returns the final state differently, let's handle both cases
+            if hasattr(result, 'final_answer'):
+                # Direct state object
+                final_state = result
+            elif isinstance(result, dict) and len(result) > 0:
+                # LangGraph returns dict-like object, get state values
+                # Try to find a state-like object in the result
+                for key, value in result.items():
+                    if hasattr(value, 'final_answer') or hasattr(value, 'agent_responses'):
+                        final_state = value
+                        break
+                else:
+                    # Fallback: use the result as-is
+                    final_state = result
+            else:
+                final_state = result
+            
+            # Format results with safe access
+            final_answer = getattr(final_state, 'final_answer', None)
+            if not final_answer and isinstance(final_state, dict):
+                final_answer = final_state.get('final_answer', "No final answer generated")
+                
+            agent_responses = getattr(final_state, 'agent_responses', None)
+            if not agent_responses and isinstance(final_state, dict):
+                agent_responses = final_state.get('agent_responses', {})
+                
+            confidence_scores = getattr(final_state, 'confidence_scores', None)
+            if not confidence_scores and isinstance(final_state, dict):
+                confidence_scores = final_state.get('confidence_scores', {})
+                
+            medical_entities = getattr(final_state, 'medical_entities', None)
+            if not medical_entities and isinstance(final_state, dict):
+                medical_entities = final_state.get('medical_entities', [])
+                
+            safety_flags = getattr(final_state, 'safety_flags', None)
+            if not safety_flags and isinstance(final_state, dict):
+                safety_flags = final_state.get('safety_flags', [])
+                
+            current_round = getattr(final_state, 'current_round', None)
+            if current_round is None and isinstance(final_state, dict):
+                current_round = final_state.get('current_round', 0)
+            if current_round is None:
+                current_round = 0
+            
             # Format results
             output = {
                 "question": question,
                 "context": context,
-                "final_answer": result.final_answer,
-                "agent_responses": result.agent_responses,
-                "confidence_scores": result.confidence_scores,
-                "medical_entities": result.medical_entities,
-                "safety_flags": result.safety_flags,
-                "rounds_completed": result.current_round,
+                "final_answer": final_answer or "No final answer generated",
+                "agent_responses": agent_responses or {},
+                "confidence_scores": confidence_scores or {},
+                "medical_entities": medical_entities or [],
+                "safety_flags": safety_flags or [],
+                "rounds_completed": current_round,
                 "workflow_status": "completed"
             }
             
-            logger.info(f"Workflow completed successfully in {result.current_round} rounds")
+            logger.info(f"Workflow completed successfully in {current_round} rounds")
             return output
             
         except Exception as e:

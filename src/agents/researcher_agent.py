@@ -330,19 +330,19 @@ Focus on evidence-based medicine and current clinical guidelines."""
         quality_score = 0
         
         # Check clinical trials availability
-        if research_results["clinical_trials"]["data"]:
+        if research_results["clinical_trials"].get("trials", []):
             quality_score += 2
         
         # Check literature availability
-        if research_results["literature"]["data"]:
+        if research_results["literature"].get("articles", []):
             quality_score += 2
         
         # Check variant data availability
-        if research_results["variants"]["data"]:
+        if research_results["variants"].get("variants", []):
             quality_score += 1
         
         # Check for RCTs or systematic reviews
-        literature_data = research_results["literature"]["data"]
+        literature_data = research_results["literature"].get("articles", [])
         if any("randomized" in str(article).lower() or "systematic" in str(article).lower() 
                for article in literature_data):
             quality_score += 2
@@ -359,11 +359,11 @@ Focus on evidence-based medicine and current clinical guidelines."""
         evidence_level = 1  # Base level
         
         # Boost for clinical trials
-        if research_results["clinical_trials"]["data"]:
+        if research_results["clinical_trials"].get("trials", []):
             evidence_level += 2
         
         # Boost for high-quality literature
-        literature_data = research_results["literature"]["data"]
+        literature_data = research_results["literature"].get("articles", [])
         for article in literature_data:
             article_str = str(article).lower()
             if "systematic review" in article_str or "meta-analysis" in article_str:
@@ -407,27 +407,27 @@ RESEARCH FINDINGS:
 """
             
             # Add clinical trials information
-            if research_results["clinical_trials"]["data"]:
+            if research_results["clinical_trials"].get("trials", []):
                 enhanced_response += f"🔬 Clinical Trials ({research_results['clinical_trials']['source']}):\n"
-                for i, trial in enumerate(research_results["clinical_trials"]["data"][:3]):
+                for i, trial in enumerate(research_results["clinical_trials"]["trials"][:3]):
                     title = trial.get("title", "Unknown Trial")
                     status = trial.get("status", "Unknown")
                     enhanced_response += f"  {i+1}. {title} (Status: {status})\n"
                 enhanced_response += "\n"
             
             # Add literature information
-            if research_results["literature"]["data"]:
+            if research_results["literature"].get("articles", []):
                 enhanced_response += f"📚 Recent Literature ({research_results['literature']['source']}):\n"
-                for i, article in enumerate(research_results["literature"]["data"][:3]):
+                for i, article in enumerate(research_results["literature"]["articles"][:3]):
                     title = article.get("title", "Unknown Article")
                     journal = article.get("journal", "Unknown Journal")
                     enhanced_response += f"  {i+1}. {title}\n     Journal: {journal}\n"
                 enhanced_response += "\n"
             
             # Add variant information
-            if research_results["variants"]["data"]:
+            if research_results["variants"].get("variants", []):
                 enhanced_response += f"🧬 Genetic Variants ({research_results['variants']['source']}):\n"
-                for i, variant in enumerate(research_results["variants"]["data"][:2]):
+                for i, variant in enumerate(research_results["variants"]["variants"][:2]):
                     variant_id = variant.get("id", "Unknown Variant")
                     significance = variant.get("clinical_significance", "Unknown")
                     enhanced_response += f"  {i+1}. {variant_id} (Significance: {significance})\n"

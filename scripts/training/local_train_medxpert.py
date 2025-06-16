@@ -250,7 +250,7 @@ class LocalMedicalTrainer:
             combined_texts,
             truncation=True,
             padding=True,  # Enable padding to ensure consistent lengths
-            max_length=512,
+            max_length=384,  # Reduced from 512 to save memory
             return_tensors=None  # Return lists, not tensors
         )
         
@@ -319,37 +319,44 @@ class LocalMedicalTrainer:
         return TrainingArguments(
             output_dir=f"{self.output_dir}/models/{agent_type}",
             
-            # Training configuration
-            num_train_epochs=3,
-            per_device_train_batch_size=2 if torch.cuda.is_available() else 1,
-            per_device_eval_batch_size=2,
-            gradient_accumulation_steps=4,
+            # Training configuration - Reduced for memory efficiency
+            num_train_epochs=2,
+            per_device_train_batch_size=1,  # Reduced to minimize memory usage
+            per_device_eval_batch_size=1,
+            gradient_accumulation_steps=8,  # Increased to maintain effective batch size
             
             # Optimization (higher learning rate for LoRA)
             learning_rate=2e-4,
             weight_decay=0.01,
-            warmup_steps=100,
+            warmup_steps=50,
             
-            # Memory optimization
+            # Memory optimization - More aggressive settings
             fp16=torch.cuda.is_available(),
             dataloader_pin_memory=False,
             gradient_checkpointing=True,
             remove_unused_columns=False,
+            dataloader_num_workers=0,  # Avoid multiprocessing issues
             
-            # Logging and saving
-            logging_steps=10,
-            save_steps=100,
-            eval_steps=100,
-            save_total_limit=2,
+            # Disable DataParallel to avoid multi-GPU issues
+            dataloader_drop_last=True,
+            
+            # Logging and saving - Reduced frequency
+            logging_steps=25,
+            save_steps=200,
+            eval_steps=200,
+            save_total_limit=1,  # Keep only best model
             eval_strategy="steps",
             
             # W&B integration
-            report_to="wandb" if not self.wandb_config.get("disable_wandb", False) else None,
+            report_to="wandb" if not self.wandb_config.get("disable_wandb", False) else [],
             run_name=f"{agent_type}-agent" if not self.wandb_config.get("disable_wandb", False) else None,
             
             # Load best model at end
             load_best_model_at_end=True,
             metric_for_best_model="eval_loss",
+            
+            # Explicitly disable distributed training
+            local_rank=-1,
         )
     
     def train_agent(self, agent_type: str, train_dataset: Dataset, eval_dataset: Dataset) -> Dict[str, Any]:
@@ -406,13 +413,27 @@ class LocalMedicalTrainer:
             data_collator=data_collator,
         )
         
-        # Set CUDA device for this agent
+        # Set CUDA device for this agent and disable multi-GPU
         if torch.cuda.is_available() and device.startswith("cuda"):
-            torch.cuda.set_device(int(device.split(":")[-1]))
+            device_id = int(device.split(":")[-1])
+            torch.cuda.set_device(device_id)
+            # Set environment variables to force single GPU
+            os.environ["CUDA_VISIBLE_DEVICES"] = str(device_id)
         
         # Train
         logger.info(f"🚀 Starting training for {agent_type} agent...")
-        train_result = trainer.train()
+        try:
+            train_result = trainer.train()
+        except RuntimeError as e:
+            if "CUDA" in str(e):
+                logger.error(f"CUDA error during training: {e}")
+                # Try to recover
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()
+                raise
+            else:
+                raise
         
         # Save model (PEFT adapter + tokenizer)
         trainer.save_model()
@@ -420,6 +441,17 @@ class LocalMedicalTrainer:
         
         # Save the PEFT adapter separately as well for easier loading
         model.save_pretrained(training_args.output_dir)
+        
+        # Aggressive memory cleanup
+        del trainer
+        del model
+        del tokenizer
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            # Force garbage collection
+            import gc
+            gc.collect()
         
         # Save training stats
         training_stats = {
@@ -476,14 +508,31 @@ class LocalMedicalTrainer:
                 result = self.train_agent(agent_type, train_dataset, eval_dataset)
                 all_results.append(result)
                 
-                # Clear GPU memory and reset device between agents
+                # Aggressive cleanup between agents
                 if torch.cuda.is_available():
+                    # Check memory before cleanup
+                    allocated_before = torch.cuda.memory_allocated() / 1024**3  # GB
+                    reserved_before = torch.cuda.memory_reserved() / 1024**3   # GB
+                    
                     torch.cuda.empty_cache()
                     torch.cuda.synchronize()
                     
-                # Small delay to ensure cleanup
+                    # Force garbage collection
+                    import gc
+                    gc.collect()
+                    
+                    # Check memory after cleanup
+                    allocated_after = torch.cuda.memory_allocated() / 1024**3  # GB
+                    reserved_after = torch.cuda.memory_reserved() / 1024**3    # GB
+                    
+                    logger.info(f"🧹 Memory cleanup: {allocated_before:.2f}GB -> {allocated_after:.2f}GB allocated, "
+                              f"{reserved_before:.2f}GB -> {reserved_after:.2f}GB reserved")
+                    
+                # Longer delay to ensure complete cleanup
                 import time
-                time.sleep(2)
+                time.sleep(5)
+                
+                logger.info(f"✅ {agent_type} agent completed, moving to next agent")
                 
             except Exception as e:
                 logger.error(f"❌ Failed to train {agent_type} agent: {e}")

@@ -13,8 +13,8 @@ from typing import Dict, Any
 # Add src to path (now we're in scripts/training, so go up two levels to root)
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from src.training.maporl_trainer import create_trainer, load_medical_dataset, MAPoRLConfig
-from src.config.model_config import MULTI_AGENT_CONFIG
+from src.training.mapoRRL_trainer import create_trainer, load_medical_dataset, MAPoRLConfig
+from src.config.model_config import MULTI_AGENT_CONFIG, ALT_MULTI_AGENT_CONFIG, QWEN_MULTI_AGENT_CONFIG
 
 # Setup logging
 logging.basicConfig(
@@ -51,6 +51,11 @@ def parse_args():
     parser.add_argument("--save_every", type=int, default=100, help="Save checkpoint every N steps")
     parser.add_argument("--eval_every", type=int, default=50, help="Evaluate every N steps")
     parser.add_argument("--output_dir", type=str, default="./outputs", help="Output directory")
+    
+    # Model configuration arguments
+    parser.add_argument("--model_config", type=str, default="default", 
+                       choices=["default", "medical", "qwen"], 
+                       help="Model configuration to use: default (DialoGPT), medical (Bio-BERT), qwen (Qwen3-0.6B)")
     
     # Logging arguments
     parser.add_argument("--wandb_project", type=str, default="maporl-medical", help="W&B project name")
@@ -177,11 +182,22 @@ def main():
                     "data/eval_data_path": args.eval_data,
                 })
         
+        # Select model configuration based on argument
+        if args.model_config == "qwen":
+            workflow_config = QWEN_MULTI_AGENT_CONFIG.__dict__
+            logger.info("🤖 Using Qwen3-0.6B configuration (all agents)")
+        elif args.model_config == "medical":
+            workflow_config = ALT_MULTI_AGENT_CONFIG.__dict__
+            logger.info("🏥 Using Medical BERT configuration")
+        else:
+            workflow_config = None  # Use default MULTI_AGENT_CONFIG
+            logger.info("💬 Using default DialoGPT configuration")
+        
         # Create trainer
         logger.info("Creating MAPoRL trainer...")
         trainer = create_trainer(
             config=config,
-            workflow_config=None,  # Use default
+            workflow_config=workflow_config,
             device=args.device
         )
         

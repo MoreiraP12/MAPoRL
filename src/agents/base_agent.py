@@ -89,17 +89,23 @@ class BaseMedicalAgent(ABC):
             max_length = self.model_config.get("max_length", 512)
             
         try:
+            # Use adaptive truncation based on model's max_length
+            input_max_length = max(384, max_length - 256)  # Leave room for generation
+            
             inputs = self.tokenizer.encode(
                 prompt, 
                 return_tensors="pt", 
                 truncation=True, 
-                max_length=max_length
+                max_length=input_max_length
             ).to(self.device)
+            
+            # Use adaptive generation tokens based on available space
+            max_new_tokens = min(256, max_length - inputs.shape[1])
             
             with torch.no_grad():
                 outputs = self.model.generate(
                     inputs,
-                    max_length=max_length,
+                    max_new_tokens=max(max_new_tokens, 64),  # At least 64 tokens
                     temperature=self.model_config.get("temperature", 0.7),
                     top_p=self.model_config.get("top_p", 0.9),
                     do_sample=True,

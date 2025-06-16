@@ -2,7 +2,7 @@
 Training Package.
 """
 
-from .maporl_trainer import (
+from .mapoRRL_trainer import (
     MAPoRLTrainer,
     MAPoRLConfig,
     MedicalDataset,

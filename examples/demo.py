@@ -8,12 +8,12 @@ import logging
 import json
 from typing import Dict, Any
 
-# Add src to path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+# Add project root to path
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from src.workflow.medical_workflow import create_medical_workflow
 from src.reward.medical_reward_system import create_medical_reward_system
-from src.training.maporl_trainer import create_trainer, load_medical_dataset, MAPoRLConfig
+from src.training.mapoRRL_trainer import create_trainer, load_medical_dataset, MAPoRLConfig
 from src.config.model_config import MULTI_AGENT_CONFIG
 
 # Setup logging

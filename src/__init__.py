@@ -8,7 +8,7 @@ __description__ = "Multi-Agent Post-co-training for Collaborative Medical LLMs w
 
 from .workflow.medical_workflow import create_medical_workflow, MedicalWorkflow
 from .reward.medical_reward_system import create_medical_reward_system, MedicalRewardSystem
-from .training.maporl_trainer import create_trainer, MAPoRLTrainer, MAPoRLConfig
+from .training.mapoRRL_trainer import create_trainer, MAPoRLTrainer, MAPoRLConfig
 
 __all__ = [
     "create_medical_workflow",
